@@ -19,6 +19,8 @@ Usage:
     job = await get_job(job_id)
 """
 
+from __future__ import annotations
+
 import os
 from datetime import datetime, timezone
 from uuid import uuid4

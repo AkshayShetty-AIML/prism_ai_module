@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import time
+from typing import Optional
 
 import google.generativeai as genai
 
@@ -20,7 +21,7 @@ from .utils import strip_markdown_fences
 logger = logging.getLogger("prism.llm.gemini")
 
 
-def call_gemini(system: str, prompt: str) -> dict | None:
+def call_gemini(system: str, prompt: str) -> Optional[dict]:
     """
     Call the Google Gemini API and return a parsed JSON dict.
 

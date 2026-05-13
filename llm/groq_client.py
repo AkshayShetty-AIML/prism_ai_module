@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import time
+from typing import Optional
 
 from groq import Groq
 
@@ -20,7 +21,7 @@ from .utils import strip_markdown_fences
 logger = logging.getLogger("prism.llm.groq")
 
 
-def call_groq(system: str, prompt: str) -> dict | None:
+def call_groq(system: str, prompt: str) -> Optional[dict]:
     """
     Call the Groq API (Llama-3) and return a parsed JSON dict.
 
