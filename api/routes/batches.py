@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from api.schemas import BatchSubmitRequest, BatchSubmitResponse, JobStatusResponse
 from db.mongo_client import create_job, get_job, save_record, update_job
+from pipeline.pipeline_runner import process_record
 
 router = APIRouter()
 
@@ -46,8 +47,8 @@ async def process_batch(job_id: str, batch_id: str, keyword: str, items: list[di
             record["batch_id"] = batch_id
             record["keyword"] = keyword
 
-            # ── Run pipeline (stub for now — Day 3 wires real phases) ──
-            record = await run_pipeline(record)
+            # ── Run through 5-phase pipeline ──
+            record = await process_record(record)
 
             # Track filtered records
             if not record.get("is_relevant", True):
@@ -84,21 +85,6 @@ async def process_batch(job_id: str, batch_id: str, keyword: str, items: list[di
         "progress": 100,
         "completed_at": datetime.now(timezone.utc).isoformat(),
     })
-
-
-async def run_pipeline(record: dict) -> dict:
-    """
-    Stub for the 5-phase pipeline. Returns the record unchanged.
-
-    Day 3: This gets replaced with the real pipeline_runner.process_record()
-    that calls Eng B and Eng C modules in sequence:
-        detect_language → normalise_tanglish → filter_noise →
-        classify_bot → classify_promo → assess_credibility →
-        tag_sentiment → score_impact
-    """
-    record["pipeline_stage_stopped"] = "complete"
-    record["processed_at"] = datetime.now(timezone.utc).isoformat()
-    return record
 
 
 # ── Routes ──────────────────────────────────────────────────────────
