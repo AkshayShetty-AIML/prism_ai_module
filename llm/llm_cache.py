@@ -17,6 +17,7 @@ Usage:
 """
 
 import hashlib
+from typing import Optional
 
 # ── In-memory cache store ───────────────────────────────────────────
 _cache: dict[str, dict] = {}
@@ -31,7 +32,7 @@ def build_cache_key(system: str, prompt: str) -> str:
     return hashlib.md5(combined).hexdigest()
 
 
-def get_cached(key: str) -> dict | None:
+def get_cached(key: str) -> Optional[dict]:
     """
     Look up a cache key. Returns the stored LLM result dict if found,
     None if not cached.

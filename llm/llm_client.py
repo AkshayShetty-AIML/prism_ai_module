@@ -14,6 +14,7 @@ Usage:
 import hashlib
 import logging
 import os
+from typing import Optional
 
 from .gemini_client import call_gemini
 from .groq_client import call_groq
@@ -43,7 +44,7 @@ def call_llm(
     prompt: str,
     system: str = "",
     use_cache: bool = True,
-) -> dict | None:
+) -> Optional[dict]:
     """
     Route an LLM call to the appropriate provider with fallback and caching.
 
