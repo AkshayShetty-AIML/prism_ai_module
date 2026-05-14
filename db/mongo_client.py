@@ -429,3 +429,172 @@ async def get_records_by_theme_group(
         .limit(limit)
     )
     return await cursor.to_list(length=limit)
+
+
+async def get_sentiment_trend(
+    keyword: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    """
+    Returns hourly sentiment counts for a keyword, sorted chronologically.
+
+    Each entry: {"hour": "2026-05-10T08:00:00Z", "positive": int, "neutral": int, "negative": int}
+    """
+    db = get_db()
+    match_stage: dict = {"keyword": keyword, "is_relevant": True}
+
+    if date_from or date_to:
+        date_filter = {}
+        if date_from:
+            date_filter["$gte"] = date_from
+        if date_to:
+            date_filter["$lte"] = date_to
+        match_stage["processed_at"] = date_filter
+
+    pipeline = [
+        {"$match": match_stage},
+        {
+            "$group": {
+                "_id": {
+                    "hour": {
+                        "$dateToString": {
+                            "format": "%Y-%m-%dT%H:00:00Z",
+                            "date": {"$toDate": "$processed_at"},
+                        }
+                    },
+                    "sentiment": "$sentiment",
+                },
+                "count": {"$sum": 1},
+            }
+        },
+        {"$sort": {"_id.hour": 1}},
+    ]
+
+    cursor = db["analyzed_records"].aggregate(pipeline)
+    raw = await cursor.to_list(length=None)
+
+    hours: dict[str, dict] = {}
+    for r in raw:
+        hour = r["_id"]["hour"]
+        sentiment = r["_id"]["sentiment"]
+        if hour not in hours:
+            hours[hour] = {"hour": hour, "positive": 0, "neutral": 0, "negative": 0}
+        if sentiment in hours[hour]:
+            hours[hour][sentiment] = r["count"]
+
+    return sorted(hours.values(), key=lambda x: x["hour"])
+
+
+async def get_viral_records(
+    keyword: str,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict:
+    """
+    Returns viral posts (impact_score > 80) sorted by impact score descending.
+    """
+    db = get_db()
+    skip = (page - 1) * page_size
+    query = {"keyword": keyword, "is_relevant": True, "impact_score": {"$gt": 80}}
+
+    total = await db["analyzed_records"].count_documents(query)
+    cursor = (
+        db["analyzed_records"]
+        .find(query, {"_id": 0})
+        .sort("impact_score", -1)
+        .skip(skip)
+        .limit(page_size)
+    )
+    items = await cursor.to_list(length=page_size)
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": items,
+    }
+
+
+async def get_keywords_compare(keyword_list: list[str]) -> list[dict]:
+    """
+    Returns sentiment distribution for each keyword in the list.
+    """
+    results = []
+    for kw in keyword_list:
+        dist = await get_sentiment_distribution(keyword=kw)
+        results.append({"keyword": kw, **dist})
+    return results
+
+
+async def get_crisis_severity_counts(
+    keyword: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> dict:
+    """
+    Returns count of records grouped by crisis_severity for a keyword.
+
+    Returns: {"critical": int, "high": int, "medium": int, "low": int, "none": int}
+    """
+    db = get_db()
+    match_stage: dict = {"keyword": keyword, "is_relevant": True}
+
+    if date_from or date_to:
+        date_filter = {}
+        if date_from:
+            date_filter["$gte"] = date_from
+        if date_to:
+            date_filter["$lte"] = date_to
+        match_stage["processed_at"] = date_filter
+
+    pipeline = [
+        {"$match": match_stage},
+        {"$group": {"_id": "$crisis_severity", "count": {"$sum": 1}}},
+    ]
+
+    cursor = db["analyzed_records"].aggregate(pipeline)
+    raw = await cursor.to_list(length=20)
+
+    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "none": 0}
+    for r in raw:
+        key = (r["_id"] or "none").lower()
+        if key in counts:
+            counts[key] = r["count"]
+
+    return counts
+
+
+async def get_keyword_volume(
+    keyword: str,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    ref_from: str | None = None,
+    ref_to: str | None = None,
+) -> dict:
+    """
+    Returns total item count for a keyword in the current window plus delta vs reference window.
+
+    Returns: {"total": int, "reference_total": int, "delta": int}
+    """
+    db = get_db()
+
+    async def _count(kw: str, from_: str | None, to_: str | None) -> int:
+        q: dict = {"keyword": kw, "is_relevant": True}
+        if from_ or to_:
+            date_filter = {}
+            if from_:
+                date_filter["$gte"] = from_
+            if to_:
+                date_filter["$lte"] = to_
+            q["processed_at"] = date_filter
+        return await db["analyzed_records"].count_documents(q)
+
+    total = await _count(keyword, date_from, date_to)
+    ref_total = await _count(keyword, ref_from, ref_to)
+
+    return {
+        "total": total,
+        "reference_total": ref_total,
+        "delta": total - ref_total,
+    }
